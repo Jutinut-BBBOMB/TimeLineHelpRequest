@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelpRequest Timeline Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">🚑 HelpRequest Tracker</h1>
+            <p class="text-gray-500 text-sm mb-4">ระบบติดตามสถานะการช่วยเหลือและเบิกจ่ายสิ่งของบริจาค (Timeline)</p>
+            
+            <div class="flex gap-2">
+                <input type="text" id="requestIdInput" placeholder="ใส่ Request ID (เช่น REQ-ABCD1234)" 
+                       class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="searchTimeline()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg transition">
+                    ค้นหา
+                </button>
+            </div>
+        </div>
+
+        <div id="resultContainer" class="bg-white rounded-xl shadow-lg p-6 hidden">
+            <div class="border-b pb-4 mb-6 flex justify-between items-end">
+                <div>
+                    <p class="text-sm text-gray-500">Request ID</p>
+                    <h2 id="displayReqId" class="text-xl font-bold text-gray-900">-</h2>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">Current Status</p>
+                    <span id="displayStatus" class="inline-block bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">-</span>
+                </div>
+            </div>
+
+            <div class="relative border-l-2 border-blue-200 ml-3 mt-4" id="timelineList">
+                </div>
+        </div>
+
+        <div id="messageBox" class="text-center text-gray-500 mt-8 hidden"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = "https://nwqhdbi491.execute-api.us-east-1.amazonaws.com"; 
+
+        async function searchTimeline() {
+            const input = document.getElementById('requestIdInput').value.trim();
+            const resultContainer = document.getElementById('resultContainer');
+            const messageBox = document.getElementById('messageBox');
+            const timelineList = document.getElementById('timelineList');
+
+            if (!input) {
+                alert("กรุณาใส่ Request ID");
+                return;
+            }
+
+            // ซ่อนผลลัพธ์เก่า โชว์ Loading
+            resultContainer.classList.add('hidden');
+            messageBox.classList.remove('hidden');
+            messageBox.innerHTML = '<span class="animate-pulse">⏳ กำลังค้นหาข้อมูล...</span>';
+
+            try {
+                // สมมติว่าเส้น API สำหรับดึงข้อมูลของคุณคือ GET /v1/help-requests/{request_id}
+                // (ถ้าของคุณเป็น path อื่น ให้แก้ตรงนี้นะครับ)
+                const response = await fetch(`${API_BASE_URL}/v1/help-requests/${input}/timeline`);
+                
+                if (!response.ok) {
+                    throw new Error(`ไม่พบข้อมูล (Status: ${response.status}) <br><span class="text-sm">ถ้าแน่ใจว่า ID ถูก อาจจะติดปัญหา CORS</span>`);
+                }
+
+                const data = await response.json();
+                
+                // ดึงข้อมูลมาใช้ (ปรับตามโครงสร้าง JSON ของ API คุณ)
+                const timelineLogs = data.timeline_logs || (data.Item ? data.Item.timeline_logs : []);
+                const currentStatus = data.current_status || (data.Item ? data.Item.current_status : "UNKNOWN");
+
+                if (!timelineLogs || timelineLogs.length === 0) {
+                    throw new Error("พบ Request ID แต่ไม่มีประวัติ Timeline");
+                }
+
+                // อัปเดต Header
+                document.getElementById('displayReqId').textContent = input;
+                document.getElementById('displayStatus').textContent = currentStatus;
+
+                // วาด Timeline
+                timelineList.innerHTML = ""; // ล้างของเก่า
+                
+                // เรียงลำดับจากใหม่สุดไปเก่าสุด (ถ้าอยากให้เก่าอยู่บน ให้เอา .reverse() ออก)
+                const sortedLogs = timelineLogs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+                sortedLogs.forEach(log => {
+                    const dateObj = new Date(log.updated_at);
+                    const formattedDate = dateObj.toLocaleString('th-TH', { 
+                        year: 'numeric', month: 'short', day: 'numeric', 
+                        hour: '2-digit', minute:'2-digit', second:'2-digit' 
+                    });
+
+                    // สร้าง HTML สำหรับแต่ละจุดบน Timeline
+                    const logItem = `
+                        <div class="mb-8 ml-6">
+                            <span class="absolute flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full -left-[9px] ring-4 ring-white"></span>
+                            <div class="bg-gray-50 rounded-lg p-4 border border-gray-100 shadow-sm">
+                                <div class="flex justify-between items-start mb-1">
+                                    <h3 class="font-semibold text-gray-900 text-lg">${log.status_at_time}</h3>
+                                    <span class="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded">อัปเดตโดย: ${log.updated_by}</span>
+                                </div>
+                                <time class="block mb-2 text-sm font-normal text-gray-400">🕒 ${formattedDate}</time>
+                                <p class="text-gray-600 whitespace-pre-line">${log.note}</p>
+                            </div>
+                        </div>
+                    `;
+                    timelineList.innerHTML += logItem;
+                });
+
+                // โชว์ผลลัพธ์
+                messageBox.classList.add('hidden');
+                resultContainer.classList.remove('hidden');
+
+            } catch (error) {
+                messageBox.innerHTML = `<span class="text-red-500 font-medium">❌ ${error.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>
