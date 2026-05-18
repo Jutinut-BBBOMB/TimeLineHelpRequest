@@ -28,18 +28,42 @@
         </div>
 
         <div id="resultContainer" class="bg-white rounded-xl shadow-lg p-6 hidden">
-            <div class="border-b pb-4 mb-6 flex justify-between items-end">
+            
+            <div class="flex justify-between items-start mb-4">
                 <div>
                     <p class="text-sm text-gray-500">Request ID</p>
-                    <h2 id="displayReqId" class="text-xl font-bold text-gray-900">-</h2>
+                    <h2 id="displayReqId" class="text-2xl font-bold text-gray-900">-</h2>
                 </div>
                 <div class="text-right">
-                    <p class="text-sm text-gray-500">Current Status</p>
-                    <span id="displayStatus" class="inline-block bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">-</span>
+                    <p class="text-sm text-gray-500 mb-1">สถานะปัจจุบัน</p>
+                    <span id="displayStatus" class="inline-block bg-blue-100 text-blue-800 text-sm font-bold px-3 py-1 rounded-full shadow-sm">-</span>
                 </div>
             </div>
 
-            <div class="relative border-l-2 border-blue-200 ml-3 mt-4" id="timelineList">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
+                <h3 class="text-sm font-bold text-gray-700 border-b border-gray-200 pb-2 mb-3">📋 รายละเอียดคำร้อง (Case Details)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase tracking-wider">รหัสเหตุการณ์ (Incident ID)</p>
+                        <p id="displayIncidentId" class="font-medium text-gray-900 mt-1">-</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase tracking-wider">ประเภทคำร้อง (Type)</p>
+                        <p id="displayType" class="font-medium text-gray-900 mt-1">-</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase tracking-wider">วันที่รับแจ้ง (Created At)</p>
+                        <p id="displayCreatedAt" class="font-medium text-gray-900 mt-1">-</p>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-gray-500 text-xs uppercase tracking-wider">รายละเอียด / อาการ (Description)</p>
+                        <p id="displayDescription" class="font-medium text-gray-900 mt-1 bg-white p-2 rounded border mt-1">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-bold text-gray-800 mb-4">📍 ประวัติการดำเนินการ (Timeline)</h3>
+            <div class="relative border-l-2 border-blue-200 ml-3 mt-2" id="timelineList">
                 </div>
         </div>
 
@@ -66,32 +90,46 @@
             messageBox.innerHTML = '<span class="animate-pulse">⏳ กำลังค้นหาข้อมูล...</span>';
 
             try {
-                // สมมติว่าเส้น API สำหรับดึงข้อมูลของคุณคือ GET /v1/help-requests/{request_id}
-                // (ถ้าของคุณเป็น path อื่น ให้แก้ตรงนี้นะครับ)
                 const response = await fetch(`${API_BASE_URL}/v1/help-requests/${input}/timeline`);
                 
                 if (!response.ok) {
-                    throw new Error(`ไม่พบข้อมูล (Status: ${response.status}) <br><span class="text-sm">ถ้าแน่ใจว่า ID ถูก อาจจะติดปัญหา CORS</span>`);
+                    throw new Error(`ไม่พบข้อมูล (Status: ${response.status})`);
                 }
 
                 const data = await response.json();
                 
-                // ดึงข้อมูลมาใช้ (ปรับตามโครงสร้าง JSON ของ API คุณ)
-                const timelineLogs = data.timeline_logs || (data.Item ? data.Item.timeline_logs : []);
-                const currentStatus = data.current_status || (data.Item ? data.Item.current_status : "UNKNOWN");
+                // ดึงก้อนข้อมูลหลัก (รองรับทั้งแบบ { Item: {...} } และแบบคืนค่ามาตรงๆ)
+                const itemData = data.Item || data;
+                const timelineLogs = itemData.timeline_logs || [];
+                const currentStatus = itemData.current_status || "UNKNOWN";
 
                 if (!timelineLogs || timelineLogs.length === 0) {
                     throw new Error("พบ Request ID แต่ไม่มีประวัติ Timeline");
                 }
 
-                // อัปเดต Header
-                document.getElementById('displayReqId').textContent = input;
+                // 🌟 อัปเดตข้อมูลรายละเอียด (Case Details) โดยดักจับชื่อฟิลด์หลายๆ รูปแบบ
+                document.getElementById('displayReqId').textContent = itemData.request_id || itemData.requestId || input;
                 document.getElementById('displayStatus').textContent = currentStatus;
-
-                // วาด Timeline
-                timelineList.innerHTML = ""; // ล้างของเก่า
                 
-                // เรียงลำดับจากใหม่สุดไปเก่าสุด (ถ้าอยากให้เก่าอยู่บน ให้เอา .reverse() ออก)
+                // ลองหาชื่อฟิลด์หลายๆ แบบ เผื่อใน Database เซฟไว้ชื่ออื่น
+                document.getElementById('displayIncidentId').textContent = itemData.incident_id || itemData.incidentId || itemData.IncidentId || "ไม่ระบุข้อมูล";
+                document.getElementById('displayType').textContent = itemData.request_type || itemData.requestType || itemData.type || itemData.requestType || "ไม่ระบุประเภท";
+                document.getElementById('displayDescription').textContent = itemData.description || itemData.injuryDescription || itemData.detail || itemData.details || "ไม่มีรายละเอียดเพิ่มเติม";
+                
+                // แปลงวันที่ (รองรับทั้ง created_at และ createdAt)
+                const rawDate = itemData.created_at || itemData.createdAt || itemData.timestamp;
+                if (rawDate) {
+                    const createdDate = new Date(rawDate);
+                    document.getElementById('displayCreatedAt').textContent = createdDate.toLocaleString('th-TH', { 
+                        year: 'numeric', month: 'short', day: 'numeric', 
+                        hour: '2-digit', minute:'2-digit' 
+                    });
+                } else {
+                    document.getElementById('displayCreatedAt').textContent = "ไม่ระบุเวลา";
+                }
+
+                // 🌟 วาด Timeline
+                timelineList.innerHTML = ""; // ล้างของเก่า
                 const sortedLogs = timelineLogs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
                 sortedLogs.forEach(log => {
@@ -101,17 +139,16 @@
                         hour: '2-digit', minute:'2-digit', second:'2-digit' 
                     });
 
-                    // สร้าง HTML สำหรับแต่ละจุดบน Timeline
                     const logItem = `
-                        <div class="mb-8 ml-6">
-                            <span class="absolute flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full -left-[9px] ring-4 ring-white"></span>
-                            <div class="bg-gray-50 rounded-lg p-4 border border-gray-100 shadow-sm">
+                        <div class="mb-8 ml-6 relative">
+                            <span class="absolute flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full -left-[33px] ring-4 ring-white mt-1"></span>
+                            <div class="bg-white rounded-lg p-4 border border-gray-100 shadow-sm hover:shadow-md transition">
                                 <div class="flex justify-between items-start mb-1">
                                     <h3 class="font-semibold text-gray-900 text-lg">${log.status_at_time}</h3>
-                                    <span class="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded">อัปเดตโดย: ${log.updated_by}</span>
+                                    <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded border">อัปเดตโดย: ${log.updated_by}</span>
                                 </div>
                                 <time class="block mb-2 text-sm font-normal text-gray-400">🕒 ${formattedDate}</time>
-                                <p class="text-gray-600 whitespace-pre-line">${log.note}</p>
+                                <p class="text-gray-700 whitespace-pre-line leading-relaxed">${log.note}</p>
                             </div>
                         </div>
                     `;
