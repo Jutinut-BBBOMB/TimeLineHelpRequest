@@ -22,6 +22,13 @@ export const handler = async (event) => {
         // ---------------------------------------------------------
         if (routeKey === "POST /v1/help-requests") {
             const body = JSON.parse(event.body);
+            if (!body.incident_id || !body.request_type) {
+                return { 
+                    statusCode: 400, 
+                    headers: { "Content-Type": "application/json" }, 
+                    body: JSON.stringify({ error: "Missing required fields: incident_id and request_type ." }) 
+                };
+            }
             const traceId = event.headers?.['x-trace-id'] || `trace-${randomUUID()}`;
             const requestId = `REQ-${randomUUID().substring(0, 8).toUpperCase()}`;
             const now = new Date().toISOString();
@@ -83,6 +90,7 @@ export const handler = async (event) => {
             }));
 
             return { statusCode: 201, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: requestId, current_status: newItem.current_status, incident_verified: isIncidentVerified }) };
+            
         }
 
         // ---------------------------------------------------------
@@ -91,8 +99,17 @@ export const handler = async (event) => {
         if (routeKey === "GET /v1/help-requests/{request_id}/timeline") {
             const requestId = event.pathParameters.request_id; 
             const response = await docClient.send(new GetCommand({ TableName: TABLE_NAME, Key: { request_id: requestId } }));
-            if (!response.Item) return { statusCode: 404, body: JSON.stringify({ message: "Help request not found" }) };
-            return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: response.Item.request_id, current_status: response.Item.current_status, timeline_logs: response.Item.timeline_logs }) };
+            
+            if (!response.Item) return { statusCode: 404, headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ message: "Help request not found" }) };
+            
+            return { 
+                statusCode: 200, 
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*" 
+                }, 
+                body: JSON.stringify(response.Item) 
+            };
         }
 
         // ---------------------------------------------------------
@@ -103,11 +120,19 @@ export const handler = async (event) => {
             const body = JSON.parse(event.body);
             const now = new Date().toISOString();
 
+            
+            const newStatus = body.status || body.new_status;
+            if (!newStatus) {
+                return { 
+                    statusCode: 400, 
+                    headers: { "Content-Type": "application/json" }, 
+                    body: JSON.stringify({ error: "Missing required field: new_status or status must be provided." }) 
+                };
+            }
             const getResponse = await docClient.send(new GetCommand({ TableName: TABLE_NAME, Key: { request_id: requestId } }));
             if (!getResponse.Item) return { statusCode: 404, body: JSON.stringify({ message: "Not found" }) };
-
+            
             const item = getResponse.Item;
-            const newStatus = body.status || body.new_status;
 
             item.timeline_logs.push({
                 update_id: randomUUID(),
